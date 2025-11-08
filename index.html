@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Game Tetris</title>
+
+    <style>
+        :root {
+            --board-bg: #1a1a1a;
+            --border-color: #555;
+            --text-color: #eee;
+            --overlay-bg: rgba(0, 0, 0, 0.8);
+            --button-bg: #444;
+            --button-active: #666;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #222;
+            color: var(--text-color);
+            touch-action: manipulation; /* Mencegah zoom di mobile */
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        /* Kontainer utama game */
+        .game-wrapper {
+            display: flex;
+            flex-wrap: wrap; /* Baris baru di layar kecil */
+            justify-content: center;
+            gap: 20px;
+        }
+
+        /* Papan permainan */
+        .game-board-container {
+            position: relative;
+            border: 4px solid var(--border-color);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            /* Ukuran kanvas diatur di JS (300x600) */
+        }
+
+        canvas {
+            display: block;
+            background-color: var(--board-bg);
+        }
+
+        /* Panel info di samping */
+        .info-panel {
+            width: 160px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .info-box {
+            background: var(--board-bg);
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+        
+        .info-box h2 {
+            margin: 0 0 10px 0;
+            font-size: 1rem;
+            color: #aaa;
+        }
+        
+        #score, #level, #lines {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        #next-piece-canvas {
+            background: var(--board-bg);
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+        }
+
+        /* Overlay Game Over */
+        #gameOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--overlay-bg);
+            display: none; /* Sembunyi by default */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            text-align: center;
+        }
+        
+        #gameOverlay h2 {
+            font-size: 2.5rem;
+            color: #e74c3c;
+            margin: 0;
+        }
+        
+        #playAgainButton {
+            font-size: 1.2rem;
+            padding: 0.75rem 1.5rem;
+            margin-top: 1.5rem;
+            background-color: #2ecc71;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* Kontrol di Layar */
+        .controls-container {
+            display: grid;
+            grid-template-columns: repeat(3, 80px);
+            grid-template-rows: repeat(2, 80px);
+            gap: 10px;
+            margin-top: 20px;
+            /* Atur di tengah */
+            grid-template-areas: 
+                ". up ."
+                "left down right";
+        }
+
+        .controls-container button {
+            font-size: 2rem;
+            border: none;
+            border-radius: 12px;
+            background-color: var(--button-bg);
+            color: white;
+            cursor: pointer;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        .controls-container button:active {
+            background-color: var(--button-active);
+        }
+
+        #btnRotate { grid-area: up; }
+        #btnLeft { grid-area: left; }
+        #btnDown { grid-area: down; }
+        #btnRight { grid-area: right; }
+        
+        /* Layout untuk layar lebih besar */
+        @media (min-width: 600px) {
+            .controls-container {
+                display: none; /* Sembunyikan di desktop */
+            }
+        }
+        /* Layout untuk layar kecil */
+        @media (max-width: 599px) {
+            .info-panel {
+                width: 100%;
+                flex-direction: row;
+                justify-content: space-around;
+            }
+            .info-box {
+                flex-grow: 1;
+            }
+            #next-piece-container {
+                width: 120px;
+            }
+            #next-piece-canvas {
+                width: 100%;
+                height: 120px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="game-wrapper">
+        
+        <div class="game-board-container">
+            <canvas id="gameCanvas"></canvas>
+            
+            <div id="gameOverlay">
+                <h2>Game Over</h2>
+                <button id="playAgainButton">Main Lagi</button>
+            </div>
+        </div>
+
+        <div class="info-panel">
+            <div class="info-box">
+                <h2>SKOR</h2>
+                <div id="score">0</div>
+            </div>
+            <div class="info-box">
+                <h2>LEVEL</h2>
+                <div id="level">1</div>
+            </div>
+            <div class="info-box">
+                <h2>BARIS</h2>
+                <div id="lines">0</div>
+            </div>
+            <div id="next-piece-container" class="info-box">
+                <h2>NEXT</h2>
+                <canvas id="next-piece-canvas" width="120" height="120"></canvas>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="controls-container">
+        <button id="btnRotate">▲</button>
+        <button id="btnLeft">◀</button>
+        <button id="btnDown">▼</button>
+        <button id="btnRight">▶</button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // === 1. Seleksi Elemen DOM ===
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const nextCanvas = document.getElementById('next-piece-canvas');
+            const nextCtx = nextCanvas.getContext('2d');
+            
+            const scoreDisplay = document.getElementById('score');
+            const levelDisplay = document.getElementById('level');
+            const linesDisplay = document.getElementById('lines');
+            
+            const overlay = document.getElementById('gameOverlay');
+            const playAgainButton = document.getElementById('playAgainButton');
+
+            // === 2. Konstanta & Pengaturan Game ===
+            const COLS = 10; // Lebar papan
+            const ROWS = 20; // Tinggi papan
+            const BLOCK_SIZE = 30; // Ukuran blok (piksel)
+            const LINES_PER_LEVEL = 10;
+            const SCORE_MAP = { 1: 100, 2: 300, 3: 500, 4: 800 }; // Skor per baris
+            
+            // Atur ukuran kanvas
+            canvas.width = COLS * BLOCK_SIZE;
+            canvas.height = ROWS * BLOCK_SIZE;
+
+            // Warna untuk balok
+            const COLORS = [
+                null,
+                '#FF0D72', // Z (Merah)
+                '#0DC2FF', // I (Biru Muda)
+                '#0DFF72', // S (Hijau)
+                '#F538FF', // T (Ungu)
+                '#FF8E0D', // L (Oranye)
+                '#FFE138', // J (Kuning)
+                '#3877FF'  // O (Biru Tua)
+            ];
+
+            // Bentuk Balok (Tetrominoes)
+            // Merepresentasikan 4 kemungkinan rotasi untuk setiap bentuk
+            const TETROMINOES = {
+                'T': {
+                    color: 4,
+                    shapes: [
+                        [[0, 4, 0], [4, 4, 4], [0, 0, 0]],
+                        [[0, 4, 0], [0, 4, 4], [0, 4, 0]],
+                        [[0, 0, 0], [4, 4, 4], [0, 4, 0]],
+                        [[0, 4, 0], [4, 4, 0], [0, 4, 0]]
+                    ]
+                },
+                'I': {
+                    color: 2,
+                    shapes: [
+                        [[0, 0, 0, 0], [2, 2, 2, 2], [0, 0, 0, 0], [0, 0, 0, 0]],
+                        [[0, 0, 2, 0], [0, 0, 2, 0], [0, 0, 2, 0], [0, 0, 2, 0]],
+                        [[0, 0, 0, 0], [0, 0, 0, 0], [2, 2, 2, 2], [0, 0, 0, 0]],
+                        [[0, 2, 0, 0], [0, 2, 0, 0], [0, 2, 0, 0], [0, 2, 0, 0]]
+                    ]
+                },
+                'O': {
+                    color: 7,
+                    shapes: [ // 'O' tidak berotasi
+                        [[7, 7], [7, 7]],
+                        [[7, 7], [7, 7]],
+                        [[7, 7], [7, 7]],
+                        [[7, 7], [7, 7]]
+                    ]
+                },
+                'S': {
+                    color: 3,
+                    shapes: [
+                        [[0, 3, 3], [3, 3, 0], [0, 0, 0]],
+                        [[0, 3, 0], [0, 3, 3], [0, 0, 3]],
+                        [[0, 0, 0], [0, 3, 3], [3, 3, 0]],
+                        [[3, 0, 0], [3, 3, 0], [0, 3, 0]]
+                    ]
+                },
+                'Z': {
+                    color: 1,
+                    shapes: [
+                        [[1, 1, 0], [0, 1, 1], [0, 0, 0]],
+                        [[0, 0, 1], [0, 1, 1], [0, 1, 0]],
+                        [[0, 0, 0], [1, 1, 0], [0, 1, 1]],
+                        [[0, 1, 0], [1, 1, 0], [1, 0, 0]]
+                    ]
+                },
+                'J': {
+                    color: 6,
+                    shapes: [
+                        [[6, 0, 0], [6, 6, 6], [0, 0, 0]],
+                        [[0, 6, 6], [0, 6, 0], [0, 6, 0]],
+                        [[0, 0, 0], [6, 6, 6], [0, 0, 6]],
+                        [[0, 6, 0], [0, 6, 0], [6, 6, 0]]
+                    ]
+                },
+                'L': {
+                    color: 5,
+                    shapes: [
+                        [[0, 0, 5], [5, 5, 5], [0, 0, 0]],
+                        [[0, 5, 0], [0, 5, 0], [0, 5, 5]],
+                        [[0, 0, 0], [5, 5, 5], [5, 0, 0]],
+                        [[5, 5, 0], [0, 5, 0], [0, 5, 0]]
+                    ]
+                }
+            };
+
+            // === 3. Variabel Status Game ===
+            let board; // 2D Array (grid)
+            let currentPiece;
+            let nextPiece;
+            let score;
+            let level;
+            let lines;
+            let isGameOver;
+            let dropInterval;
+            let lastTime;
+
+            /**
+             * Membuat grid papan permainan (2D array)
+             */
+            function createBoard() {
+                return Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+            }
+
+            /**
+             * Membuat balok baru secara acak
+             */
+            function getNewPiece() {
+                const pieces = 'TIOZSJL';
+                const randPiece = pieces[Math.floor(Math.random() * pieces.length)];
+                const pieceData = TETROMINOES[randPiece];
+                
+                return {
+                    shape: pieceData.shapes,
+                    color: pieceData.color,
+                    rotation: 0, // Indeks rotasi awal
+                    x: Math.floor(COLS / 2) - 1, // Posisi awal X (tengah)
+                    y: 0 // Posisi awal Y (atas)
+                };
+            }
+            
+            /**
+             * Memulai atau me-reset permainan
+             */
+            function startGame() {
+                board = createBoard();
+                score = 0;
+                level = 1;
+                lines = 0;
+                isGameOver = false;
+                
+                currentPiece = getNewPiece();
+                nextPiece = getNewPiece();
+                
+                dropInterval = 1000; // 1 detik
+                lastTime = 0;
+
+                overlay.style.display = 'none';
+                updateUI();
+                
+                // Mulai game loop
+                gameLoop();
+            }
+
+            /**
+            * Game Loop Utama (menggunakan requestAnimationFrame)
+            */
+            function gameLoop(currentTime = 0) {
+                if (isGameOver) return;
+
+                const deltaTime = currentTime - lastTime;
+                
+                // Logika jatuhkan balok
+                if (deltaTime > dropInterval) {
+                    moveDown();
+                    lastTime = currentTime;
+                }
+                
+                draw(); // Gambar ulang
+                requestAnimationFrame(gameLoop);
+            }
+
+            /**
+             * Menggambar semua elemen ke kanvas
+             */
+            function draw() {
+                // Bersihkan kanvas utama
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Gambar balok yang sudah terkunci (di papan)
+                drawBoard();
+                
+                // Gambar balok yang sedang jatuh
+                drawPiece(currentPiece, ctx);
+                
+                // Gambar balok 'Next'
+                drawNextPiece();
+            }
+            
+            /**
+             * Menggambar grid papan
+             */
+            function drawBoard() {
+                for (let row = 0; row < ROWS; row++) {
+                    for (let col = 0; col < COLS; col++) {
+                        if (board[row][col] > 0) {
+                            drawBlock(ctx, col, row, COLORS[board[row][col]]);
+                        }
+                    }
+                }
+            }
+            
+            /**
+             * Menggambar balok yang sedang jatuh (currentPiece)
+             */
+            function drawPiece(piece, context) {
+                const currentShape = piece.shape[piece.rotation];
+                const color = COLORS[piece.color];
+                
+                currentShape.forEach((row, y) => {
+                    row.forEach((value, x) => {
+                        if (value > 0) {
+                            drawBlock(context, piece.x + x, piece.y + y, color);
+                        }
+                    });
+                });
+            }
+            
+            /**
+             * Menggambar balok 'Next' di kanvas kecil
+             */
+            function drawNextPiece() {
+                nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+                
+                // Pusatkan balok di kanvas 'next'
+                const piece = nextPiece;
+                const shape = piece.shape[0]; // Hanya rotasi default
+                const color = COLORS[piece.color];
+                const size = shape.length;
+                const offsetX = (nextCanvas.width / BLOCK_SIZE - size) / 2;
+                const offsetY = (nextCanvas.height / BLOCK_SIZE - size) / 2;
+                
+                shape.forEach((row, y) => {
+                    row.forEach((value, x) => {
+                        if (value > 0) {
+                            drawBlock(nextCtx, offsetX + x, offsetY + y, color);
+                        }
+                    });
+                });
+            }
+
+            /**
+             * Fungsi bantuan untuk menggambar 1 blok
+             */
+            function drawBlock(context, x, y, color) {
+                context.fillStyle = color;
+                context.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+                context.strokeStyle = 'rgba(0,0,0,0.2)';
+                context.strokeRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+            }
+
+            /**
+             * Memeriksa tabrakan (dinding, bawah, balok lain)
+             */
+            function isValidMove(piece) {
+                const currentShape = piece.shape[piece.rotation];
+                
+                for (let y = 0; y < currentShape.length; y++) {
+                    for (let x = 0; x < currentShape[y].length; x++) {
+                        if (currentShape[y][x] > 0) {
+                            let newX = piece.x + x;
+                            let newY = piece.y + y;
+                            
+                            // 1. Cek tabrakan dinding kiri/kanan
+                            if (newX < 0 || newX >= COLS) return false;
+                            // 2. Cek tabrakan lantai
+                            if (newY >= ROWS) return false;
+                            // 3. Cek tabrakan balok lain (pastikan tidak di luar batas atas)
+                            if (newY >= 0 && board[newY][newX] > 0) return false;
+                        }
+                    }
+                }
+                return true;
+            }
+
+            /**
+             * Gerakan: Kiri
+             */
+            function moveLeft() {
+                const testPiece = { ...currentPiece, x: currentPiece.x - 1 };
+                if (isValidMove(testPiece)) {
+                    currentPiece.x--;
+                    draw();
+                }
+            }
+            
+            /**
+             * Gerakan: Kanan
+             */
+            function moveRight() {
+                const testPiece = { ...currentPiece, x: currentPiece.x + 1 };
+                if (isValidMove(testPiece)) {
+                    currentPiece.x++;
+                    draw();
+                }
+            }
+            
+            /**
+             * Gerakan: Bawah
+             */
+            function moveDown() {
+                const testPiece = { ...currentPiece, y: currentPiece.y + 1 };
+                if (isValidMove(testPiece)) {
+                    currentPiece.y++;
+                } else {
+                    // Balok mendarat
+                    lockPiece();
+                    clearLines();
+                    spawnNewPiece();
+                }
+                draw();
+            }
+
+            /**
+             * Gerakan: Rotasi
+             */
+            function rotate() {
+                const nextRotation = (currentPiece.rotation + 1) % 4;
+                const testPiece = { ...currentPiece, rotation: nextRotation };
+                
+                if (isValidMove(testPiece)) {
+                    currentPiece.rotation = nextRotation;
+                } else {
+                    // Coba "Wall Kick" sederhana (geser 1 ke kiri/kanan)
+                    testPiece.x = currentPiece.x + 1; // Coba geser kanan
+                    if (isValidMove(testPiece)) {
+                        currentPiece.rotation = nextRotation;
+                        currentPiece.x++;
+                        return;
+                    }
+                    testPiece.x = currentPiece.x - 1; // Coba geser kiri
+                    if (isValidMove(testPiece)) {
+                        currentPiece.rotation = nextRotation;
+                        currentPiece.x--;
+                        return;
+                    }
+                }
+                draw();
+            }
+
+            /**
+             * Mengunci balok ke papan
+             */
+            function lockPiece() {
+                const currentShape = currentPiece.shape[currentPiece.rotation];
+                currentShape.forEach((row, y) => {
+                    row.forEach((value, x) => {
+                        if (value > 0) {
+                            if (currentPiece.y + y >= 0) {
+                                board[currentPiece.y + y][currentPiece.x + x] = currentPiece.color;
+                            }
+                        }
+                    });
+                });
+            }
+
+            /**
+             * Memeriksa dan membersihkan baris yang penuh
+             */
+            function clearLines() {
+                let linesCleared = 0;
+                
+                for (let row = ROWS - 1; row >= 0; row--) {
+                    // Cek apakah baris penuh (tidak ada 0)
+                    if (board[row].every(cell => cell > 0)) {
+                        linesCleared++;
+                        // Hapus baris
+                        board.splice(row, 1);
+                        // Tambah baris kosong baru di atas
+                        board.unshift(Array(COLS).fill(0));
+                        // Ulangi cek untuk baris yang sama (karena baris di atasnya turun)
+                        row++; 
+                    }
+                }
+                
+                // Update Skor dan Level
+                if (linesCleared > 0) {
+                    score += SCORE_MAP[linesCleared] * level;
+                    lines += linesCleared;
+                    
+                    // Cek naik level
+                    if (lines >= level * LINES_PER_LEVEL) {
+                        level++;
+                        // Percepat game
+                        dropInterval = Math.max(100, 1000 - (level * 50));
+                    }
+                    updateUI();
+                }
+            }
+
+            /**
+             * Memunculkan balok baru
+             */
+            function spawnNewPiece() {
+                currentPiece = nextPiece;
+                nextPiece = getNewPiece();
+                
+                // Cek Game Over
+                if (!isValidMove(currentPiece)) {
+                    triggerGameOver();
+                }
+            }
+
+            /**
+             * Mengakhiri permainan
+             */
+            function triggerGameOver() {
+                isGameOver = true;
+                overlay.style.display = 'flex';
+            }
+            
+            /**
+             * Update UI (Skor, Level, Baris)
+             */
+            function updateUI() {
+                scoreDisplay.textContent = score;
+                levelDisplay.textContent = level;
+                linesDisplay.textContent = lines;
+            }
+
+            /**
+             * Menangani Input Keyboard
+             */
+            function handleKeyDown(e) {
+                if (isGameOver) return;
+                
+                switch (e.key) {
+                    case 'ArrowLeft':
+                    case 'a':
+                        moveLeft();
+                        break;
+                    case 'ArrowRight':
+                    case 'd':
+                        moveRight();
+                        break;
+                    case 'ArrowDown':
+                    case 's':
+                        moveDown();
+                        break;
+                    case 'ArrowUp':
+                    case 'w':
+                        rotate();
+                        break;
+                    case ' ': // Spasi untuk Hard Drop (opsional, tapi bagus)
+                        e.preventDefault(); // Mencegah scroll
+                        while (isValidMove({ ...currentPiece, y: currentPiece.y + 1 })) {
+                            currentPiece.y++;
+                        }
+                        moveDown(); // Panggil moveDown terakhir untuk lock
+                        break;
+                }
+            }
+
+            // === 4. Event Listeners ===
+            document.addEventListener('keydown', handleKeyDown);
+            playAgainButton.addEventListener('click', startGame);
+
+            // Listener Tombol di Layar
+            document.getElementById('btnLeft').addEventListener('click', moveLeft);
+            document.getElementById('btnRight').addEventListener('click', moveRight);
+            document.getElementById('btnDown').addEventListener('click', moveDown);
+            document.getElementById('btnRotate').addEventListener('click', rotate);
+
+            // === 5. Mulai Game ===
+            startGame();
+        });
+    </script>
+
+</body>
+</html>
